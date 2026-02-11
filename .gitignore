@@ -1,0 +1,76 @@
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec
+
+# ========================
+# Virtual environments
+# ========================
+venv/
+.env/
+env/
+.venv/
+venv.bak/
+
+# ========================
+# IDE / Editors
+# ========================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ========================
+# OS generated files
+# ========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ========================
+# Project-specific
+# ========================
+
+# Model weights (large binary files)
+models/*.pt
+
+# Input / output folders
+input_images_test/
+output/
+images_cache/
+
+
+# Logs and debug files
+*.log
+debug/
+logs/
+tmp/
+cache/
+__results__/
+
+# JSON outputs (optional: if they’re generated)
+output/*.json
+
+# ========================
+# Jupyter / Notebook files (if used)
+# ========================
+.ipynb_checkpoints/
+*.ipynb
+
+# ========================
+# Misc
+# ========================
+*.bak
+*.tmp
+*.swp
+.env

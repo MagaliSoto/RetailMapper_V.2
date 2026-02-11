@@ -1,0 +1,36 @@
+# Core computer vision
+opencv-python==4.10.0.84
+pillow==11.0.0
+
+# Deep learning stack
+torch==2.4.1
+torchvision==0.19.1
+torchaudio==2.4.1
+
+# YOLO and model management
+ultralytics==8.3.24
+huggingface_hub==0.25.2
+
+# CLIP
+open-clip-torch==2.26.1
+
+# OpenAI
+# OpenAI SDK
+openai==2.15.0
+httpx==0.27.2
+
+# OCR
+pytesseract==0.3.13
+# tesseract-ocr se instala a nivel sistema
+
+# Data handling
+pandas==2.2.3
+openpyxl==3.1.5
+
+# API
+fastapi==0.115.2
+uvicorn[standard]==0.30.6
+python-multipart==0.0.20
+
+# Testing
+pytest==8.4.2
