@@ -1,55 +1,61 @@
 """
 Unified CLIP embedding and grouping module.
 
-This module provides:
-- CLIP model loading (singleton)
-- Image → embedding conversion
-- Embedding fusion
-- Cosine similarity computation
-- Adaptive threshold matching
-- Internal similarity grouping
-- Graph-based clustering utilities
+Responsibilities
+----------------
+- Load CLIP model (singleton pattern)
+- Convert images to normalized embeddings
+- Compute cosine similarity
+- Apply adaptive similarity thresholding
+- Perform internal similarity grouping
+- Provide CLIP-based product clustering utilities
+
+IMPORTANT:
+This module does NOT configure logging globally.
+Logging configuration must be handled by the application entrypoint.
 """
 
 import torch
 import numpy as np
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple, Union, Optional, Set
 from collections import defaultdict
 from PIL import Image
 from io import BytesIO
 import open_clip
 
 
+logger = logging.getLogger(__name__)
+
+
 # ============================================================
 # Device configuration
 # ============================================================
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S"
-)
+device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 # ============================================================
 # CLIP model singleton loader
 # ============================================================
 
-_clip_model = None
+_clip_model: Optional[torch.nn.Module] = None
 _preprocess = None
 
 
-def get_clip():
+def get_clip() -> Tuple[torch.nn.Module, Any]:
     """
-    Loads CLIP ViT-H-14 once and keeps it in memory.
+    Load CLIP ViT-H-14 model once and reuse it.
+
+    Returns
+    -------
+    Tuple[torch.nn.Module, Any]
+        Loaded model and preprocess transform.
     """
     global _clip_model, _preprocess
 
     if _clip_model is None:
-        logging.info("Loading CLIP ViT-H-14 model...")
+        logger.info("Loading CLIP model", extra={"model": "ViT-H-14"})
         _clip_model, _, _preprocess = open_clip.create_model_and_transforms(
             "ViT-H-14",
             pretrained="laion2b_s32b_b79k"
@@ -64,9 +70,24 @@ def get_clip():
 # Tensor utilities
 # ============================================================
 
-def ensure_tensor(x: Any, unsqueeze: bool = False) -> torch.Tensor:
+def ensure_tensor(
+    x: Any,
+    unsqueeze: bool = False
+) -> torch.Tensor:
     """
-    Ensures input is a torch.Tensor on the correct device.
+    Ensure input is a torch.Tensor located on the correct device.
+
+    Parameters
+    ----------
+    x : Any
+        Input embedding-like object.
+    unsqueeze : bool
+        If True and input is 1D, adds batch dimension.
+
+    Returns
+    -------
+    torch.Tensor
+        Tensor on target device.
     """
     if not isinstance(x, torch.Tensor):
         x = torch.tensor(x, dtype=torch.float32)
@@ -81,7 +102,18 @@ def ensure_tensor(x: Any, unsqueeze: bool = False) -> torch.Tensor:
 
 def safe_normalize(x: torch.Tensor) -> torch.Tensor:
     """
-    L2 normalizes a tensor safely.
+    Perform safe L2 normalization.
+
+    Prevents division by zero by adding epsilon.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+
+    Returns
+    -------
+    torch.Tensor
+        L2-normalized tensor.
     """
     return x / (x.norm(dim=-1, keepdim=True) + 1e-8)
 
@@ -90,9 +122,25 @@ def safe_normalize(x: torch.Tensor) -> torch.Tensor:
 # Image → embedding
 # ============================================================
 
-def image_to_embedding(image) -> torch.Tensor | None:
+def image_to_embedding(
+    image: Union[np.ndarray, bytes, bytearray, Image.Image]
+) -> Optional[torch.Tensor]:
     """
-    Converts numpy / bytes / PIL image into normalized CLIP embedding.
+    Convert image input into normalized CLIP embedding.
+
+    Supported formats:
+    - numpy array (OpenCV BGR expected)
+    - raw bytes
+    - PIL Image
+
+    Parameters
+    ----------
+    image : Union[np.ndarray, bytes, bytearray, PIL.Image.Image]
+
+    Returns
+    -------
+    Optional[torch.Tensor]
+        Normalized embedding vector [D] or None.
     """
     if image is None:
         return None
@@ -121,25 +169,34 @@ def image_to_embedding(image) -> torch.Tensor | None:
 
 
 # ============================================================
-# Cosine similarity (unified)
+# Cosine similarity
 # ============================================================
 
-def cosine_similarity(a, b) -> float:
+def cosine_similarity(
+    a: Union[torch.Tensor, np.ndarray, List[float]],
+    b: Union[torch.Tensor, np.ndarray, List[float]]
+) -> float:
     """
-    Computes cosine similarity between two embeddings.
-    Accepts torch / numpy / list.
-    """
-    a = ensure_tensor(a)
-    b = ensure_tensor(b)
+    Compute cosine similarity between two embeddings.
 
-    a = safe_normalize(a)
-    b = safe_normalize(b)
+    Parameters
+    ----------
+    a : embedding-like
+    b : embedding-like
+
+    Returns
+    -------
+    float
+        Cosine similarity score.
+    """
+    a = safe_normalize(ensure_tensor(a))
+    b = safe_normalize(ensure_tensor(b))
 
     return float(torch.dot(a.flatten(), b.flatten()))
 
 
 # ============================================================
-# Similarity computation against group
+# Similarity computation
 # ============================================================
 
 def compute_similarities(
@@ -147,19 +204,33 @@ def compute_similarities(
     embeddings: Dict[int, Any]
 ) -> Dict[int, float]:
     """
-    Computes cosine similarity between reference and a group.
-    """
-    ref_embedding = ensure_tensor(ref_embedding, unsqueeze=True)
-    ref_embedding = safe_normalize(ref_embedding)
+    Compute similarity between reference embedding and group.
 
-    results = {}
+    Parameters
+    ----------
+    ref_embedding : Any
+        Reference embedding.
+    embeddings : Dict[int, Any]
+        id → embedding.
+
+    Returns
+    -------
+    Dict[int, float]
+        id → similarity score.
+    """
+    ref_embedding = safe_normalize(
+        ensure_tensor(ref_embedding, unsqueeze=True)
+    )
+
+    results: Dict[int, float] = {}
 
     for id_, emb in embeddings.items():
         if emb is None:
             continue
 
-        emb = ensure_tensor(emb, unsqueeze=True)
-        emb = safe_normalize(emb)
+        emb = safe_normalize(
+            ensure_tensor(emb, unsqueeze=True)
+        )
 
         sim = torch.matmul(ref_embedding, emb.T).item()
         results[id_] = float(sim)
@@ -172,18 +243,24 @@ def compute_similarities(
 # ============================================================
 
 def determine_matches(
-    similarities: dict,
+    similarities: Dict[int, float],
     label_ref: str = "",
     method: str = "dynamic",
     top_margin: float = 0.2,
     tolerance: float = 0.02
-) -> tuple[dict, float]:
+) -> Tuple[Dict[int, bool], float]:
     """
-    Determines which similarities pass an adaptive threshold.
-    Preserves original interface from Code 1.
+    Determine which similarities pass adaptive threshold.
 
-    Returns:
-        (matches_dict, threshold)
+    Strategy:
+    - Compute top similarity
+    - Adjust threshold dynamically based on std deviation
+    - Apply tolerance correction
+
+    Returns
+    -------
+    Tuple[Dict[int, bool], float]
+        Match map and threshold value.
     """
     if not similarities:
         return {}, 0.0
@@ -200,23 +277,31 @@ def determine_matches(
     dynamic_tolerance = max(tolerance, top_sim * 0.025 + std_val * 0.25)
     threshold -= dynamic_tolerance
 
-    logging.info(
-        f"Threshold for '{label_ref}': {threshold:.3f} "
-        f"(tol={dynamic_tolerance:.3f}, std={std_val:.3f})"
+    logger.info(
+        "Adaptive threshold computed",
+        extra={
+            "label": label_ref,
+            "threshold": float(threshold),
+            "top_similarity": float(top_sim),
+            "std": float(std_val)
+        }
     )
 
-    matches = {id_num: sim >= threshold for id_num, sim in similarities.items()}
+    matches = {
+        id_num: sim >= threshold
+        for id_num, sim in similarities.items()
+    }
 
     return matches, threshold
 
 
 # ============================================================
-# Main comparison function (unified)
+# Public comparison interface
 # ============================================================
 
 def compare_images_clip(
-    detected_embeddings: dict,
-    ref_embedding,
+    detected_embeddings: Dict[int, Any],
+    ref_embedding: Any,
     label_ref: str = "",
     use_text: bool = False,
     return_scores: bool = True,
@@ -224,14 +309,14 @@ def compare_images_clip(
     method: str = "dynamic",
     top_margin: float = 0.2,
     tolerance: float = 0.03
-):
+) -> Tuple[Dict[int, float], float]:
     """
-    Original public interface for CLIP comparison.
+    Compare reference embedding against detected embeddings.
+
     ALWAYS returns (dict, threshold)
     """
-
     if ref_embedding is None:
-        logging.error("Reference embedding is None")
+        logger.error("Reference embedding is None")
         return {}, 0.0
 
     sim_visual = compute_similarities(ref_embedding, detected_embeddings)
@@ -248,15 +333,14 @@ def compare_images_clip(
     )
 
     if logs:
-        print(f"\n[Comparing label '{label_ref}']")
-        print(f"Threshold: {threshold:.3f}")
-        print(f"{'ID':<6} | {'Similarity':<10} | Match")
-        print("-" * 40)
-
-        for id_num, sim in sorted(sim_visual.items(), key=lambda x: x[1], reverse=True):
-            is_match = matches.get(id_num, False)
-            mark = "✔️" if is_match else "❌"
-            print(f"{id_num:<6} | {sim:<10.3f} | {mark}")
+        logger.info(
+            "CLIP comparison result",
+            extra={
+                "label": label_ref,
+                "threshold": float(threshold),
+                "num_candidates": len(sim_visual)
+            }
+        )
 
     if return_scores:
         return sim_visual, threshold
@@ -264,20 +348,19 @@ def compare_images_clip(
     return matches, threshold
 
 
-
 # ============================================================
-# Internal coherence grouping
+# Internal similarity grouping
 # ============================================================
 
 def expand_group_by_internal_similarity(
     seed_ids: List[int],
     embeddings: Dict[int, Any],
     min_sim: float = 0.80
-) -> set[int]:
+) -> Set[int]:
     """
-    Expands a group based on internal similarity.
+    Expand group iteratively based on internal similarity graph.
     """
-    expanded = set(seed_ids)
+    expanded: Set[int] = set(seed_ids)
     changed = True
 
     while changed:
@@ -299,10 +382,10 @@ def split_by_internal_similarity(
     min_sim: float = 0.88
 ) -> List[List[int]]:
     """
-    Splits a group into coherent subgroups.
+    Split a group into internally coherent subgroups.
     """
-    subgroups = []
-    used = set()
+    subgroups: List[List[int]] = []
+    used: Set[int] = set()
 
     for i in ids:
         if i in used:
@@ -325,7 +408,7 @@ def split_by_internal_similarity(
 
 
 # ============================================================
-# Main classification
+# Main clustering entrypoint
 # ============================================================
 
 def classify_reference(
@@ -334,11 +417,10 @@ def classify_reference(
     debug: bool = False
 ) -> Dict[int, List[int]]:
     """
-    Groups visually similar products.
+    Cluster visually similar products using CLIP similarity.
     """
-
-    groups = {}
-    used = set()
+    groups: Dict[int, List[int]] = {}
+    used: Set[int] = set()
     group_id = 1
 
     for ref_id, ref_emb in product_embeddings.items():
@@ -371,94 +453,114 @@ def classify_reference(
             used.update(sg)
             group_id += 1
 
+    logger.info(
+        "CLIP clustering completed",
+        extra={"num_groups": len(groups)}
+    )
+
     return groups
 
-def crop_from_bbox(image: np.ndarray, bbox: list[int]) -> np.ndarray:
+def crop_from_bbox(
+    image: np.ndarray,
+    bbox: List[int]
+) -> np.ndarray:
     """
-    Crops an image using a bounding box [x1, y1, x2, y2].
+    Crop a region from an image using a bounding box.
 
-    Args:
-        image (np.ndarray): Full image (BGR expected if from OpenCV)
-        bbox (list[int]): Bounding box coordinates [x1, y1, x2, y2]
+    Parameters
+    ----------
+    image : np.ndarray
+        Full image in OpenCV format (BGR expected).
+    bbox : List[int]
+        Bounding box coordinates in format [x1, y1, x2, y2].
 
-    Returns:
-        np.ndarray: Cropped image region
+    Returns
+    -------
+    np.ndarray
+        Cropped image region.
+
+    Notes
+    -----
+    Coordinates are cast to integers before slicing.
+    No bounds checking is performed (assumes valid bbox).
     """
     x1, y1, x2, y2 = map(int, bbox)
     return image[y1:y2, x1:x2]
 
 
-def compute_clip_embedding(img_path: str) -> torch.Tensor | None:
+def compute_clip_embedding(
+    img_path: str
+) -> Optional[torch.Tensor]:
     """
-    Computes a CLIP embedding from an image file path.
+    Compute a normalized CLIP embedding from an image file path.
 
-    IMPORTANT:
-    This function preserves the original contract used in other modules.
+    This function preserves the original public contract used
+    across the application.
 
-    Args:
-        img_path (str): Path to image file
+    Parameters
+    ----------
+    img_path : str
+        Path to image file.
 
-    Returns:
-        torch.Tensor | None: Normalized embedding or None if error
+    Returns
+    -------
+    Optional[torch.Tensor]
+        Normalized embedding tensor [D] or None if an error occurs.
+
+    Logging
+    -------
+    Emits structured error logs if image loading fails.
     """
     try:
         image = Image.open(img_path).convert("RGB")
         return image_to_embedding(image)
+
     except Exception as e:
-        logging.error(f"Failed to compute embedding for {img_path}: {e}")
+        logger.error(
+            "Failed to compute CLIP embedding",
+            extra={
+                "image_path": img_path,
+                "error": str(e)
+            }
+        )
         return None
-
-
-def extract_product_embeddings(products: list, image: np.ndarray):
-    """
-    Adds a CLIP embedding to each product dictionary in-place.
-
-    Each product dictionary must contain:
-        {
-            "bbox": [x1, y1, x2, y2]
-        }
-
-    The function adds:
-        product["embedding"] = torch.Tensor or None
-
-    Args:
-        products (list): List of product dicts
-        image (np.ndarray): Full image (OpenCV format expected)
-    """
-    for product in products:
-        bbox = product.get("bbox")
-
-        if bbox is None:
-            product["embedding"] = None
-            continue
-
-        crop = crop_from_bbox(image, bbox)
-        emb = image_to_embedding(crop)
-
-        product["embedding"] = emb.cpu() if emb is not None else None
 
 
 def fuse_clip_embeddings(
-    embeddings: list[torch.Tensor],
+    embeddings: List[torch.Tensor],
     normalize: bool = True
-) -> torch.Tensor | None:
+) -> Optional[torch.Tensor]:
     """
-    Fuses multiple CLIP embeddings into a single representative embedding
-    using mean pooling.
+    Fuse multiple CLIP embeddings into a single representative embedding.
 
-    Intended for reference products (e.g. planogram items).
+    Strategy
+    --------
+    - Filter invalid embeddings
+    - Mean pooling across embeddings
+    - Optional L2 normalization
 
-    Args:
-        embeddings (List[torch.Tensor]): List of embeddings [D] or [1, D]
-        normalize (bool): Whether to L2 normalize final result
+    Intended Use
+    ------------
+    Useful for reference items (e.g. planogram products)
+    where multiple sample images represent one product.
 
-    Returns:
-        torch.Tensor | None
+    Parameters
+    ----------
+    embeddings : List[torch.Tensor]
+        List of embedding tensors [D] or [1, D].
+    normalize : bool
+        Whether to L2 normalize the fused embedding.
+
+    Returns
+    -------
+    Optional[torch.Tensor]
+        Fused embedding tensor [D] or None if no valid inputs.
     """
+
     if not embeddings:
         return None
 
-    valid_embeddings = []
+    valid_embeddings: List[torch.Tensor] = []
 
     for emb in embeddings:
         if emb is None:
@@ -481,4 +583,71 @@ def fuse_clip_embeddings(
     if normalize:
         fused = fused / (fused.norm() + 1e-8)
 
+    logger.debug(
+        "Embeddings fused",
+        extra={"num_embeddings": len(valid_embeddings)}
+    )
+
     return fused
+
+
+def extract_product_embeddings(
+    products: List[Dict[str, Any]],
+    image: np.ndarray
+) -> None:
+    """
+    Add CLIP embeddings to products in-place using batch GPU processing.
+
+    This implementation preserves the original public contract:
+        - Same parameters
+        - Same return type (None)
+        - Each product gets:
+            product["embedding"] = torch.Tensor or None
+
+    Internally, it performs batch inference for GPU efficiency.
+    """
+
+    if not products:
+        return
+
+    model, preprocess = get_clip()
+
+    valid_products = []
+    processed_tensors = []
+
+    # Collect valid crops and preprocess them
+    for product in products:
+        bbox = product.get("bbox")
+
+        if bbox is None:
+            product["embedding"] = None
+            continue
+
+        crop = crop_from_bbox(image, bbox)
+
+        try:
+            pil_img = Image.fromarray(crop[..., ::-1]).convert("RGB")
+            tensor = preprocess(pil_img)
+            processed_tensors.append(tensor)
+            valid_products.append(product)
+        except Exception as e:
+            logger.warning(
+                "Failed preprocessing crop",
+                extra={"error": str(e)}
+            )
+            product["embedding"] = None
+
+    # If no valid crops → exit safely
+    if not processed_tensors:
+        return
+
+    # Batch forward pass (REAL GPU batching)
+    batch = torch.stack(processed_tensors).to(device)
+
+    with torch.no_grad():
+        embeddings = model.encode_image(batch)
+        embeddings = safe_normalize(embeddings)
+
+    # Assign embeddings back in original order
+    for product, emb in zip(valid_products, embeddings):
+        product["embedding"] = emb.cpu()

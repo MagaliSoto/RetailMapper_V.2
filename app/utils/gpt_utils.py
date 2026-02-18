@@ -1,9 +1,11 @@
 import os
 import base64
-from typing import Optional, Union, List
-from openai import OpenAI
-import logging
 import time
+import logging
+from typing import Optional, Union, List
+
+from openai import OpenAI
+
 from app.config import (
     GPT_MODEL,
     GPT_TEMPERATURE,
@@ -12,7 +14,6 @@ from app.config import (
 )
 
 logger = logging.getLogger(__name__)
-
 client = OpenAI()
 
 
@@ -23,25 +24,63 @@ def call_gpt_with_image(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
 ) -> str:
+    """
+    Call GPT with one or multiple images and optional text prompt.
+
+    Parameters
+    ----------
+    image_paths : Union[str, List[str]]
+        Path or list of paths to image files.
+    user_prompt : Optional[str]
+        User-level instruction sent along with the images.
+    system_prompt : Optional[str]
+        System-level instruction. Defaults to GPT_SYSTEM_PROMPT.
+    temperature : Optional[float]
+        Sampling temperature (ignored for certain models like gpt-5).
+    max_tokens : Optional[int]
+        Maximum output tokens override.
+
+    Returns
+    -------
+    str
+        Model textual response (stripped). Empty string if invalid structure.
+    """
 
     start = time.perf_counter()
+
+    if not image_paths:
+        raise ValueError("image_paths must not be empty.")
 
     if isinstance(image_paths, str):
         image_paths = [image_paths]
 
-    logger.info(f"Calling GPT with {len(image_paths)} images")
+    if not isinstance(image_paths, list):
+        raise TypeError("image_paths must be a string or list of strings.")
 
-    content = []
+    logger.info(
+        "Calling GPT with images",
+        extra={"num_images": len(image_paths)}
+    )
 
+    content: List[dict] = []
+
+    # Add user text instruction if provided
     if user_prompt:
         content.append({
             "type": "input_text",
             "text": user_prompt
         })
 
+    # Encode images as base64 and append to content
     for image_path in image_paths:
+        if not isinstance(image_path, str):
+            raise TypeError("Each image path must be a string.")
+
         if not os.path.exists(image_path):
-            logger.error(f"Image not found: {image_path}")
+            logger.error(
+                "Image not found",
+                extra={"image_path": image_path}
+            )
             raise FileNotFoundError(f"Image not found: {image_path}")
 
         with open(image_path, "rb") as f:
@@ -64,9 +103,12 @@ def call_gpt_with_image(
                 "content": content
             }
         ],
-        "max_output_tokens": max_tokens if max_tokens is not None else GPT_MAX_TOKENS,
+        "max_output_tokens": (
+            max_tokens if max_tokens is not None else GPT_MAX_TOKENS
+        ),
     }
 
+    # Temperature is ignored for some models (e.g., gpt-5)
     if GPT_MODEL != "gpt-5":
         request["temperature"] = (
             temperature if temperature is not None else GPT_TEMPERATURE
@@ -74,20 +116,31 @@ def call_gpt_with_image(
 
     try:
         response = client.responses.create(**request)
-    except Exception as e:
+    except Exception:
         logger.exception("GPT API call failed")
         raise
 
     duration = time.perf_counter() - start
-    logger.info(f"GPT raw response received in {duration:.3f}s")
+
+    logger.info(
+        "GPT raw response received",
+        extra={"duration_seconds": round(duration, 3)}
+    )
 
     if not hasattr(response, "output_text"):
-        logger.error(f"GPT response has no output_text: {response}")
+        logger.error(
+            "GPT response missing output_text",
+            extra={"response_repr": repr(response)}
+        )
         return ""
 
-    logger.info(f"GPT output: {response.output_text}")
+    logger.info(
+        "GPT output received",
+        extra={"output_preview": response.output_text[:200]}
+    )
 
     return response.output_text.strip()
+
 
 def call_gpt_with_images(
     image_paths: Union[str, List[str]],
@@ -95,6 +148,32 @@ def call_gpt_with_images(
     system_prompt: Optional[str] = None,
     max_retries: int = 3,
 ) -> str:
+    """
+    Call GPT with retry logic and fallback strategy.
+
+    Retries the main prompt up to `max_retries` times.
+    If all attempts fail or produce invalid labels,
+    a fallback descriptive prompt is used.
+
+    Parameters
+    ----------
+    image_paths : Union[str, List[str]]
+        Image path or list of image paths.
+    user_prompt : Optional[str]
+        Primary user instruction.
+    system_prompt : Optional[str]
+        System-level instruction.
+    max_retries : int
+        Number of retry attempts before fallback.
+
+    Returns
+    -------
+    str
+        Validated label or fallback value.
+    """
+
+    if max_retries <= 0:
+        raise ValueError("max_retries must be greater than 0.")
 
     for attempt in range(max_retries):
         try:
@@ -104,15 +183,24 @@ def call_gpt_with_images(
                 system_prompt=system_prompt,
             )
 
-            logger.info(f"GPT attempt {attempt+1} result: {result}")
+            logger.info(
+                "GPT attempt completed",
+                extra={"attempt": attempt + 1, "result": result}
+            )
 
             if is_valid_label(result):
                 return result.strip()
 
-            logger.warning("Invalid label from GPT")
+            logger.warning(
+                "Invalid label from GPT",
+                extra={"attempt": attempt + 1}
+            )
 
-        except Exception as e:
-            logger.exception(f"GPT attempt {attempt+1} failed")
+        except Exception:
+            logger.exception(
+                "GPT attempt failed",
+                extra={"attempt": attempt + 1}
+            )
 
     logger.warning("All GPT attempts failed. Trying fallback prompt.")
 
@@ -134,13 +222,29 @@ def call_gpt_with_images(
     except Exception:
         logger.exception("Fallback GPT call failed")
 
-    logger.error("Returning hard fallback: producto genérico")
+    logger.error("Returning hard fallback label")
+
     return "producto genérico"
 
 
 def is_valid_label(text: str) -> bool:
     """
-    Validates label output from GPT.
+    Validate label output returned by GPT.
+
+    A valid label:
+        - Is not empty
+        - Is not "NO LABEL"
+        - Contains at least one non-whitespace character
+
+    Parameters
+    ----------
+    text : str
+        GPT output text.
+
+    Returns
+    -------
+    bool
+        True if valid, False otherwise.
     """
 
     if not text:
@@ -148,7 +252,6 @@ def is_valid_label(text: str) -> bool:
 
     cleaned = text.strip()
 
-    # "NO LABEL" is never valid
     if cleaned.upper() == "NO LABEL":
         return False
 

@@ -1,6 +1,10 @@
-# localization/assign_row.py
+# app/localization/assign_row.py
 
-def assign_rows(products, shelves, debug=False):
+def assign_rows(
+        products:list[dict], 
+        shelves:list[dict],
+         debug=False
+    )-> list[dict]:
     """
     Assign each product to the shelf row directly below it.
     Rows are numbered from bottom (1) to top (N).

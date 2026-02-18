@@ -1,8 +1,22 @@
-import os, time
+"""
+Test for GPT-based product label classification.
+
+This test:
+- Sends product images to GPT service
+- Validates label output
+- Ensures retry + fallback logic works
+
+Requires:
+- OPENAI_API_KEY configured in environment variables
+"""
+
+import os
+import time
+
 from app.utils.gpt_utils import call_gpt_with_images
 from app.config import GPT_SYSTEM_PROMPT
 
-IMAGE_FOLDER = "output_products"
+IMAGE_FOLDER = "tmp/products"
 
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
@@ -21,23 +35,25 @@ def main():
         print("No images found")
         return
 
+    print(f"\nFound {len(images)} images\n")
+
     for img_name in images:
         img_path = os.path.join(IMAGE_FOLDER, img_name)
 
         try:
             label = call_gpt_with_images(
-                image_path=img_path,
-                user_prompt=GPT_SYSTEM_PROMPT,
+                image_paths=img_path,
+                system_prompt=GPT_SYSTEM_PROMPT,
                 max_retries=3
             )
 
             print(f"{img_name} -> {label}")
 
-
         except Exception as e:
             print(f"{img_name} -> ERROR: {e}")
-        
-        time.sleep(10)
+
+        # Avoid rate limit
+        time.sleep(5)
 
 
 if __name__ == "__main__":

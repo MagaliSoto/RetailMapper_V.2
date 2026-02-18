@@ -1,51 +1,72 @@
 """
-Script de prueba para el pipeline de procesamiento de imágenes.
-Ejecutar desde la raíz del proyecto.
+Direct test for the process_image_pipeline function.
 
-Ejemplo:
-python test_process_image_pipeline.py
+This script validates:
+- Shelf detection
+- Product detection
+- Spatial grouping
+- JSON-ready output formatting
+
+Purpose:
+Test detection + grouping pipeline independently from API.
 """
 
-import os, json
-from pprint import pprint
+import json
+import time
 
-from app.services.planogram_pipeline import process_image_pipeline
-from app.utils.json_utils import save_products_to_json
+from app.services.process_planogram_pipeline import process_image_pipeline
+from app.utils.json_utils import save_products_to_json, save_groups_to_json
+from app.core.model_loader import load_models
+from app.config import OUTPUT_FOLDER
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,  # DEBUG si querés todo
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+)
+
+IMAGE_PATH = "input_images_test/imgGondola2.jpeg"
+N_SHELF = 1
+ID_STORE = 2
+
 
 def main():
-    # ---- Configuración manual (alternativa si no querés usar config) ----
-    # img_path = "data/test_images/shelf_01.jpg"
-    # n_shelf = 1
-    # id_store = "store_001"
+    """
+    Executes full process pipeline locally.
+    """
 
-    img_path = "input_images_test\imgGondola2.jpeg"
-    n_shelf = 1
-    id_store = 112
+    print("Loading models...")
+    load_models()
 
-    if not os.path.exists(img_path):
-        raise FileNotFoundError(f"No existe la imagen: {img_path}")
+    print("Running process_image_pipeline...\n")
 
-    print("🚀 Iniciando pipeline")
-    print(f"📸 Imagen: {img_path}")
-    print(f"🧱 Shelf: {n_shelf} | 🏬 Store: {id_store}")
+    start_time = time.perf_counter()
 
-    _, dict = process_image_pipeline(
-        img_path=img_path,
-        n_shelf=n_shelf,
-        id_store=id_store
+    products, groups = process_image_pipeline(
+        IMAGE_PATH,
+        N_SHELF,
+        ID_STORE
     )
-    
-    OUTPUT_JSON = "final_data_test.json"
-    
-    os.makedirs(os.path.dirname(OUTPUT_JSON) or ".", exist_ok=True)
 
-    with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
-        json.dump(
-            dict,
-            f,
-            ensure_ascii=False,
-            indent=4
-        )
+    total_time = time.perf_counter() - start_time
+
+    print(f"Pipeline completed in {total_time:.3f}s")
+    print(f"Detected products: {len(products)}")
+    print(f"Generated groups: {len(groups)}")
+
+    save_products_to_json(
+                products=products,
+                filename="products.json",
+                output_folder=OUTPUT_FOLDER
+            )
     
+    save_groups_to_json(
+        data_groups=groups,
+        filename="data_groups.json",
+        output_folder=OUTPUT_FOLDER
+    )
+
+
+
 if __name__ == "__main__":
     main()

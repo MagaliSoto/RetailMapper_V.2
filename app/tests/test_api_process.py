@@ -1,3 +1,14 @@
+"""
+Integration test for the /process API endpoint.
+
+This test:
+- Sends an image to the API
+- Triggers the detection + grouping pipeline
+- Prints the resulting JSON response
+
+The FastAPI server must be running locally.
+"""
+
 import requests
 
 API_URL = "http://localhost:8000/process"
@@ -8,6 +19,10 @@ ID_STORE = 2
 
 
 def main():
+    """
+    Sends image and metadata to the /process endpoint.
+    """
+
     with open(IMAGE_PATH, "rb") as img:
         files = {
             "image": ("imgGondola2.jpeg", img, "image/jpeg")

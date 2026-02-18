@@ -34,3 +34,5 @@ python-multipart==0.0.20
 
 # Testing
 pytest==8.4.2
+
+python-json-logger==4.0.0

@@ -1,29 +1,35 @@
 """
-Script de prueba para compare_planogram.
-Ejecutar desde la raíz del proyecto.
+Unit-style test for the planogram comparison logic.
 
-python test_compare_planogram.py
+This script validates the behavior of the compare_planogram function.
+
+What this test verifies:
+- Matching between detected products and planogram entries
+- Correct identification of missing products
+- Detection of unexpected products
+- Correct similarity scoring behavior
+
+This test runs independently from the API layer and assumes:
+- Valid embeddings are available
+- Properly formatted planogram JSON exists
 """
-
-from pprint import pprint
-import numpy as np
-
-from app.planogram.compare_planogram import *
-from app.localization.assign_row import assign_rows
-from app.localization.assign_column import assign_columns
-from app.localization.assign_subrow import assign_subrows
-from app.utils.io_utils import load_image_as_numpy
-from app.utils.clip_utils import extract_product_embeddings
-from app.utils.json_utils import *
-from app.utils.gpt_utils import*
-from app.core.model_loader import load_models
 import json
-import os
-import numpy as np
+from app.utils.gpt_utils import *
+from app.utils.json_utils import *
+from app.planogram.compare_planogram import *
+from app.core.model_loader import load_models
+from app.utils.io_utils import load_image_as_numpy
+from app.localization.assign_row import assign_rows
+from app.localization.assign_subrow import assign_subrows
+from app.localization.assign_column import assign_columns
+from app.utils.clip_utils import extract_product_embeddings
+from app.planogram.compare_planogram import build_label_embeddings_from_planogram
+
+
 
 
 def main():
-    planogram_data_path = "output\products_test.json"
+    planogram_data_path = "output\products.json"
     
     planogram_data = load_planogram_from_json(planogram_data_path)
 
@@ -47,8 +53,14 @@ def main():
 
     print("🚀 Ejecutando comparación de planograma\n")
     
-    with open("1final_data.json", "r", encoding="utf-8") as f:
-        label_ids_dict = json.load(f)
+    with open("output/data_groups.json", "r", encoding="utf-8") as f:
+        raw_label_ids_dict = json.load(f)
+
+    label_ids_dict = {
+        group["label"]: group["product_ids"]
+        for group in raw_label_ids_dict["groups"]
+    }
+
 
     label_embeddings_dict = build_label_embeddings_from_planogram(
         label_ids_dict=label_ids_dict,

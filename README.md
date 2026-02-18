@@ -109,6 +109,9 @@ mkdir output
 docker run -p 8000:8000 -v ${PWD}/output:/app/output --env-file .env retail-mapper-api
 ```
 
+```bash
+docker run -p 8000:8000 -v ${PWD}/output:/app/output -v ${PWD}/logs:/app/logs --env-file .env retail-mapper-api
+```
 ---
 
 ## Configuration

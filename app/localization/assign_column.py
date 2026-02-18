@@ -1,37 +1,51 @@
-# localization/assign_column.py
+# app/localization/assign_column.py
 
-def assign_columns(products, x_overlap_threshold=0.3, debug=False):
+from typing import List, Dict
+
+
+def assign_columns(
+    products: List[Dict],
+    x_overlap_threshold: float = 0.3,
+    debug: bool = False
+) -> List[Dict]:
     """
     Assign column numbers to products within each shelf row.
     Products that overlap horizontally are grouped into the same column.
 
     Parameters
     ----------
-    products : list[dict]
-        List of product detections with 'bbox' and 'row'.
+    products : List[Dict]
+        List of product detections containing:
+        - 'bbox' (tuple[int, int, int, int])
+        - 'row' (int)
     x_overlap_threshold : float
-        Minimum ratio of horizontal overlap to consider products in the same column (0–1).
-        Example: 0.3 means at least 30% overlap in X axis.
+        Minimum horizontal overlap ratio (0–1) to consider
+        two products in the same column.
     debug : bool
-        If True, prints grouping information for debugging.
+        If True, prints detailed grouping information.
 
     Returns
     -------
-    list[dict]
-        Updated list of products with 'col' assigned.
+    List[Dict]
+        Updated list of products with:
+        - 'col' (int) assigned per row.
     """
     if not products:
         return products
 
     # Group products by row
-    rows = {}
+    rows: Dict[int, List[Dict]] = {}
     for p in products:
         row = p.get("row", 0)
         rows.setdefault(row, []).append(p)
 
     for row, items in rows.items():
+
         # Sort products from left to right by center X
-        items_sorted = sorted(items, key=lambda p: (p["bbox"][0] + p["bbox"][2]) / 2)
+        items_sorted = sorted(
+            items,
+            key=lambda p: (p["bbox"][0] + p["bbox"][2]) / 2
+        )
 
         col_idx = 1
         prev_box = None
@@ -51,12 +65,15 @@ def assign_columns(products, x_overlap_threshold=0.3, debug=False):
                 min_width = min(width, x2_prev - x1_prev)
                 x_overlap_ratio = overlap_x / min_width if min_width > 0 else 0
 
-                # If small overlap, it's a new column
+                # If overlap is below threshold → new column
                 if x_overlap_ratio < x_overlap_threshold:
                     col_idx += 1
 
                 if debug:
-                    print(f" - Compared with previous: overlap_x={x_overlap_ratio:.2f}, col={col_idx}")
+                    print(
+                        f" - Compared with previous: "
+                        f"overlap_ratio={x_overlap_ratio:.2f}, col={col_idx}"
+                    )
 
             prod["col"] = col_idx
             prev_box = prod["bbox"]

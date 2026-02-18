@@ -1,3 +1,12 @@
+"""
+Test for model loader singleton behavior.
+
+This test verifies:
+- Models are loaded correctly
+- get_models() returns the same instances
+- Singleton pattern works as expected
+"""
+
 from app.core.model_loader import load_models, get_models
 
 
@@ -17,7 +26,6 @@ def main():
     print(f"Shelf detector instance (get_models): {id(shelf2)}")
     print(f"Product detector instance (get_models): {id(product2)}")
 
-    # Verificación de singleton
     if shelf1 is shelf2 and product1 is product2:
         print("\n🎯 SUCCESS: Singleton behavior confirmed.")
     else:

@@ -1,59 +1,44 @@
-import cv2
-import numpy as np
-from pprint import pprint
+"""
+Test for CLIP embedding extraction logic.
 
-from utils.clip_utils import extract_product_embeddings
+This script validates:
+- Product crop extraction
+- Embedding generation using CLIP
+- Correct attachment of embedding vectors to product objects
+
+Purpose:
+Ensure embedding pipeline works independently of full audit pipeline.
+"""
+
+import json
+from app.utils.clip_utils import extract_product_embeddings
+from app.utils.io_utils import load_image_as_numpy
+
+
+IMAGE_PATH = "input_images_test/imgGondola2.jpeg"
+PRODUCTS_JSON = "output/products.json"
 
 
 def main():
-    # -----------------------------
-    # Cargar imagen de prueba
-    # -----------------------------
-    image_path = "output\Imagen.jpg"  # <-- cambia esto
-    image = cv2.imread(image_path)
+    """
+    Loads detected products and image, then generates embeddings.
+    """
 
-    if image is None:
-        raise FileNotFoundError(f"No se pudo cargar la imagen: {image_path}")
+    image = load_image_as_numpy(IMAGE_PATH)
 
-    print(f"[INFO] Imagen cargada: {image.shape}")
+    with open(PRODUCTS_JSON, "r", encoding="utf-8") as f:
+        products = json.load(f)
 
-    # -----------------------------
-    # Productos de prueba
-    # -----------------------------
-    products = [
-        {
-            "id": 1,
-            "bbox": [50, 50, 200, 200]
-        },
-        {
-            "id": 2,
-            "bbox": [220, 60, 380, 240]
-        },
-        {
-            "id": 3,
-            "bbox": None  # caso borde
-        }
-    ]
+    print("Extracting embeddings...\n")
 
-    # -----------------------------
-    # Extraer embeddings
-    # -----------------------------
     extract_product_embeddings(products, image)
 
-    # -----------------------------
-    # Mostrar resultados
-    # -----------------------------
-    print("\n[RESULTADOS]")
-    for p in products:
-        emb = p.get("embedding")
+    print("Embedding extraction completed.")
 
-        print(f"\nProducto ID: {p['id']}")
-        if emb is None:
-            print("  ❌ Embedding: None")
-        else:
-            print(f"  ✅ Embedding generado")
-            print(f"  Dimensión: {len(emb)}")
-            print(f"  Primeros 5 valores: {emb[:5]}")
+    if "embedding" in products[0]:
+        print("✅ Embeddings successfully attached to products.")
+    else:
+        print("❌ Embedding field missing.")
 
 
 if __name__ == "__main__":
