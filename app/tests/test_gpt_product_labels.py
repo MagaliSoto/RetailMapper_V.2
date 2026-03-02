@@ -19,9 +19,27 @@ from app.config import GPT_SYSTEM_PROMPT
 IMAGE_FOLDER = "tmp/products"
 
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+import logging
+
+# =====================================================
+# 🔹 LOGGER CONFIGURATION (DEBUG)
+# =====================================================
+
+def configure_logger():
+    logging.basicConfig(
+        level=logging.DEBUG,  # Nivel DEBUG
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    # Si querés que librerías externas no spameen tanto:
+    logging.getLogger("openai").setLevel(logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.INFO)
 
 
 def main():
+
+    configure_logger()
     if not os.path.exists(IMAGE_FOLDER):
         print(f"Folder not found: {IMAGE_FOLDER}")
         return

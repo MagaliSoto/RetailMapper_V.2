@@ -15,7 +15,7 @@ from app.config import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI()
-
+counter = 0
 
 def call_gpt_with_image(
     image_paths: Union[str, List[str]],
@@ -146,7 +146,7 @@ def call_gpt_with_images(
     image_paths: Union[str, List[str]],
     user_prompt: Optional[str] = None,
     system_prompt: Optional[str] = None,
-    max_retries: int = 3,
+    max_retries: int = 1,
 ) -> str:
     """
     Call GPT with retry logic and fallback strategy.
@@ -171,10 +171,12 @@ def call_gpt_with_images(
     str
         Validated label or fallback value.
     """
+    global counter
 
     if max_retries <= 0:
         raise ValueError("max_retries must be greater than 0.")
 
+    # Primary attempts
     for attempt in range(max_retries):
         try:
             result = call_gpt_with_image(
@@ -184,7 +186,7 @@ def call_gpt_with_images(
             )
 
             logger.info(
-                "GPT attempt completed",
+                "GPT primary attempt completed",
                 extra={"attempt": attempt + 1, "result": result}
             )
 
@@ -192,39 +194,57 @@ def call_gpt_with_images(
                 return result.strip()
 
             logger.warning(
-                "Invalid label from GPT",
+                "Invalid label from GPT (primary)",
                 extra={"attempt": attempt + 1}
             )
 
         except Exception:
             logger.exception(
-                "GPT attempt failed",
+                "GPT primary attempt failed",
                 extra={"attempt": attempt + 1}
             )
 
-    logger.warning("All GPT attempts failed. Trying fallback prompt.")
+    logger.warning("All primary GPT attempts failed. Trying fallback prompt.")
 
+    # Fallback attempts (2 times)
     fallback_prompt = (
         "Describí únicamente las características visuales del producto "
         "sin inventar marca ni tipo específico."
     )
 
-    try:
-        result = call_gpt_with_image(
-            image_paths=image_paths,
-            user_prompt=fallback_prompt,
-            system_prompt=system_prompt,
-        )
+    for fallback_attempt in range(2):
+        try:
+            result = call_gpt_with_image(
+                image_paths=image_paths,
+                user_prompt=fallback_prompt,
+                system_prompt=system_prompt,
+            )
 
-        if is_valid_label(result):
-            return result.strip()
+            logger.info(
+                "GPT fallback attempt completed",
+                extra={"fallback_attempt": fallback_attempt + 1, "result": result}
+            )
 
-    except Exception:
-        logger.exception("Fallback GPT call failed")
+            if is_valid_label(result):
+                return result.strip()
 
+            logger.warning(
+                "Invalid label from GPT (fallback)",
+                extra={"fallback_attempt": fallback_attempt + 1}
+            )
+
+        except Exception:
+            logger.exception(
+                "GPT fallback attempt failed",
+                extra={"fallback_attempt": fallback_attempt + 1}
+            )
+
+    # Hard fallback
     logger.error("Returning hard fallback label")
 
-    return "producto genérico"
+    counter += 1
+    return f"producto genérico {counter}"
+
 
 
 def is_valid_label(text: str) -> bool:
@@ -256,3 +276,22 @@ def is_valid_label(text: str) -> bool:
         return False
 
     return len(cleaned) > 0
+
+def call_gpt_with_text(
+    user_prompt: str,
+    max_tokens: int = 200,
+) -> str:
+
+    if not user_prompt:
+        raise ValueError("user_prompt must not be empty.")
+
+    response = client.responses.create(
+        model=GPT_MODEL,  # gpt-5
+        input=user_prompt,
+        max_output_tokens=max_tokens,
+        reasoning={"effort": "minimal"}  # 👈 IMPORTANTE
+    )
+
+    output_text = response.output_text or ""
+
+    return output_text.strip()

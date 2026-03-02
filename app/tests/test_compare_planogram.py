@@ -23,9 +23,6 @@ from app.localization.assign_row import assign_rows
 from app.localization.assign_subrow import assign_subrows
 from app.localization.assign_column import assign_columns
 from app.utils.clip_utils import extract_product_embeddings
-from app.planogram.compare_planogram import build_label_embeddings_from_planogram
-
-
 
 
 def main():
@@ -33,14 +30,14 @@ def main():
     
     planogram_data = load_planogram_from_json(planogram_data_path)
 
-    img_path = "input_images_test\imgGondola3.jpeg"
+    img_path = "input_images_test\img3.jpeg"
     img = load_image_as_numpy(img_path)
     id_store = 112
     n_shelf = 1
     shelf_detector, product_detector = load_models()
 
     shelves = shelf_detector.detect(id_store, img)
-    products = product_detector.detect(n_shelf, img)
+    products = product_detector.detect(n_shelf, img, "tmp/products2")
 
     products = assign_rows(products, shelves)
     products = assign_columns(products)
@@ -73,7 +70,6 @@ def main():
     
     result = compare_planogram(
         products_detected=products,
-        planogram_data=planogram_data,
         label_embeddings_dict=label_embeddings_dict,
         label_ids_dict=label_ids_dict,
         debug=True

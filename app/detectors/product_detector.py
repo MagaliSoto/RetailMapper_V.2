@@ -15,8 +15,7 @@ class ProductDetector:
     def __init__(
         self,
         model_path: str,
-        conf_threshold: float = 0.4,
-        output_dir: str = "tmp/products"
+        conf_threshold: float = 0.3
     ) -> None:
         """
         Initialize the product detector.
@@ -27,19 +26,16 @@ class ProductDetector:
             Path to the YOLO model weights.
         conf_threshold : float
             Minimum confidence required to keep a detection.
-        output_dir : str
-            Directory where cropped product images will be stored.
         """
         self.model = YOLO(model_path)
         self.conf_threshold = conf_threshold
-        self.output_dir = output_dir
 
-        os.makedirs(self.output_dir, exist_ok=True)
 
     def detect(
         self,
         shelf: Union[int, str],
-        frame
+        frame,
+        output_dir: str = "tmp/products"
     ) -> list[dict]:
         """
         Run product detection on a frame and save cropped images.
@@ -50,6 +46,8 @@ class ProductDetector:
             Shelf identifier associated with this detection pass.
         frame : numpy.ndarray
             Image frame in BGR format.
+        output_dir : str
+            Directory where cropped product images will be stored.
 
         Returns
         -------
@@ -59,7 +57,9 @@ class ProductDetector:
             - 'conf' (float)
             - 'shelf' (Union[int, str])
             - 'image_path' (str)
-        """
+        """        
+        os.makedirs(output_dir, exist_ok=True)
+
         results = self.model(frame)
         detections = []
 
@@ -82,7 +82,7 @@ class ProductDetector:
 
             product_id += 1
             img_path = os.path.join(
-                self.output_dir,
+                output_dir,
                 f"shelf_{shelf}_product_{product_id}.jpg"
             )
 

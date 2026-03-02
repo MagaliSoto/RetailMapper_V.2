@@ -651,3 +651,61 @@ def extract_product_embeddings(
     # Assign embeddings back in original order
     for product, emb in zip(valid_products, embeddings):
         product["embedding"] = emb.cpu()
+
+
+def compare_images_clip_for_planogram(
+    product_embeddings: Dict[Any, Any],
+    reference_embedding: Any,
+    label: str = "",
+    min_absolute_score: float = 0.30,
+    min_margin_over_threshold: float = 0.10,
+    debug: bool = False,
+):
+    """
+    Specialized CLIP comparison for inter-image planogram matching.
+
+    Adds stricter validation rules on top of the dynamic threshold logic.
+
+    Returns:
+        - validated_matches: Dict[id, score]
+        - threshold: float
+        - raw_scores: Dict[id, float]
+        - validation_details: Dict[id, Dict]
+    """
+
+    sims, threshold = compare_images_clip(
+        product_embeddings,
+        reference_embedding,
+        label
+    )
+
+    validated_matches = {}
+    validation_details = {}
+
+    for pid, score in sims.items():
+
+        passes_dynamic = score >= threshold
+        passes_absolute = score >= min_absolute_score
+        margin = score - threshold
+        passes_margin = margin >= min_margin_over_threshold
+
+        is_valid = (
+            passes_dynamic
+            and passes_absolute
+            and passes_margin
+        )
+
+        validation_details[pid] = {
+            "score": float(score),
+            "threshold": float(threshold),
+            "margin_over_threshold": float(margin),
+            "passes_dynamic": bool(passes_dynamic),
+            "passes_absolute": bool(passes_absolute),
+            "passes_margin": bool(passes_margin),
+            "final_decision": bool(is_valid),
+        }
+
+        if is_valid:
+            validated_matches[pid] = float(score)
+
+    return validated_matches, threshold, sims, validation_details

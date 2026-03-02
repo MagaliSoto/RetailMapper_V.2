@@ -25,7 +25,7 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
 )
 
-IMAGE_PATH = "input_images_test/imgGondola3.jpeg"
+IMAGE_PATH = "input_images_test/img4.jpeg"
 LABEL_IDS_JSON_PATH = "output/data_groups.json"
 PLANOGRAM_JSON_PATH = "output/products.json"
 
@@ -33,7 +33,7 @@ N_SHELF = 1
 ID_STORE = 2
 
 SAVE_OUTPUT = True
-OUTPUT_PATH = "output/products_comp_test.json"
+OUTPUT_PATH = "output/tasks.json"
 
 
 def main():

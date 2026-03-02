@@ -21,11 +21,11 @@ from app.config import OUTPUT_FOLDER
 import logging
 
 logging.basicConfig(
-    level=logging.INFO,  # DEBUG si querés todo
+    level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
 )
 
-IMAGE_PATH = "input_images_test/imgGondola2.jpeg"
+IMAGE_PATH = "input_images_test/img1.jpeg"
 N_SHELF = 1
 ID_STORE = 2
 
@@ -62,7 +62,7 @@ def main():
     
     save_groups_to_json(
         data_groups=groups,
-        filename="data_groups.json",
+        filename="data.json",
         output_folder=OUTPUT_FOLDER
     )
 

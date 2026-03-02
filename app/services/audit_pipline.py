@@ -1,5 +1,8 @@
 import time
+import json
 import logging
+from pathlib import Path
+from app.tasks.task_manager import TaskManager
 from typing import Dict, List, Any, Union, Tuple
 
 from app.config import *
@@ -82,7 +85,22 @@ def audit_image_pipeline(
         f"Products detected: {len(products)}"
     )
 
-    return results
+    results = _comparison_stage(
+        products,
+        label_ids_dict,
+        planogram_data
+    )
+
+    # Save raw comparison results
+    _saved_path = _save_results_json(results)
+
+    # Generate tasks output
+    task_manager = TaskManager()
+    final_output = task_manager.generate_tasks_output(results)
+
+    logger.info(f"Results saved to: {_saved_path}")
+
+    return final_output
 
 
 # ============================================================
@@ -201,13 +219,13 @@ def _comparison_stage(
     """
 
     # --------------------------------------------------
-    # 1️⃣ Validate input schema
+    # Validate input schema
     # --------------------------------------------------
     if "groups" not in raw_label_ids_dict:
         raise ValueError("Invalid label_ids_dict: missing 'groups' key")
 
     # --------------------------------------------------
-    # 2️⃣ Normalize schema
+    # Normalize schema
     # Convert:
     # {
     #   "groups": [
@@ -239,7 +257,7 @@ def _comparison_stage(
         raise ValueError("No valid label groups found after normalization")
 
     # --------------------------------------------------
-    # 3️⃣ Build embeddings dictionary
+    # Build embeddings dictionary
     # --------------------------------------------------
     label_embeddings_dict = build_label_embeddings_from_planogram(
         label_ids_dict=label_ids_dict,
@@ -253,11 +271,26 @@ def _comparison_stage(
         )
 
     # --------------------------------------------------
-    # 4️⃣ Execute comparison
+    # Execute comparison
     # --------------------------------------------------
     return compare_planogram(
         products_detected=products,
-        planogram_data=planogram_data,
         label_embeddings_dict=label_embeddings_dict,
         label_ids_dict=label_ids_dict
     )
+
+
+def _save_results_json(results: Dict[str, Any]) -> str:
+    """
+    Save raw comparison results to output JSON file.
+    """
+
+    output_dir = Path("output")
+    output_dir.mkdir(exist_ok=True)
+
+    output_path = output_dir / "compare_planogram.json"
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=4, ensure_ascii=False)
+
+    return str(output_path)

@@ -1,6 +1,6 @@
 import cv2
-from config import *
-from utils.io_utils import save_image_product
+from app.config import *
+from .io_utils import save_image_product
 
 def draw_shelves(frame, shelves, color=(255, 0, 0)):
     """

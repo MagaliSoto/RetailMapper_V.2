@@ -24,8 +24,8 @@ import json
 
 API_URL = "http://localhost:8000/audit"
 
-IMAGE_PATH = "input_images_test/imgGondola2.jpeg"
-PLANOGRAM_PATH = "input_images_test/imgGondola2.jpeg"
+IMAGE_PATH = "input_images_test/img4.jpeg"
+PLANOGRAM_PATH = "input_images_test/img1.jpeg"
 DATA_JSON_PATH = "output/data.json"
 
 N_SHELF = 1
