@@ -30,14 +30,14 @@ def main():
     
     planogram_data = load_planogram_from_json(planogram_data_path)
 
-    img_path = "input_images_test\img3.jpeg"
+    img_path = "input_images_test\img2.jpeg"
     img = load_image_as_numpy(img_path)
     id_store = 112
     n_shelf = 1
     shelf_detector, product_detector = load_models()
 
     shelves = shelf_detector.detect(id_store, img)
-    products = product_detector.detect(n_shelf, img, "tmp/products2")
+    products = product_detector.detect(n_shelf, img, 0.40, "tmp/products2")
 
     products = assign_rows(products, shelves)
     products = assign_columns(products)

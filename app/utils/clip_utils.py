@@ -657,8 +657,8 @@ def compare_images_clip_for_planogram(
     product_embeddings: Dict[Any, Any],
     reference_embedding: Any,
     label: str = "",
-    min_absolute_score: float = 0.30,
-    min_margin_over_threshold: float = 0.10,
+    min_absolute_score: float = 0.25,
+    min_margin_over_threshold: float = 0.05,
     debug: bool = False,
 ):
     """

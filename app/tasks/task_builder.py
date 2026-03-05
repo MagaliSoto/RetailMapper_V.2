@@ -37,9 +37,18 @@ class TaskBuilder:
         valid_products = self._extract_valid_match_products(data)
         position_map = self._build_position_map(data, valid_products)
 
-        tasks += self._build_missing_tasks(data, position_map)
-        tasks += self._build_misplaced_tasks(data, position_map)
-        tasks += self._build_unexpected_tasks(data)
+        misplaced_tasks, swap_consumed = self._build_misplaced_tasks(data, position_map)
+        tasks += misplaced_tasks
+
+        replacement_tasks, replacement_consumed = self._build_replacement_tasks(data, position_map, swap_consumed)
+
+        tasks += replacement_tasks
+
+        all_consumed = swap_consumed | replacement_consumed
+
+        tasks += self._build_missing_tasks(data, position_map, all_consumed)
+        tasks += self._build_missing_stock_tasks(data)
+        tasks += self._build_unexpected_tasks(data, all_consumed)
 
         logger.debug("Total raw tasks generated: %d", len(tasks))
 
@@ -75,7 +84,51 @@ class TaskBuilder:
     # TASK BUILDERS
     # =====================================================
 
-    def _build_missing_tasks(self, data: dict, position_map: dict) -> List[Dict]:
+    def _build_missing_stock_tasks(self, data: dict) -> List[Dict]:
+        """
+        Generates tasks for products that are present
+        but with insufficient stock.
+        """
+        logger.debug("Processing missing stock products")
+
+        tasks = []
+        debug_data = data.get("debug", {})
+
+        for pid in data.get("missing_stock", []):
+            detections = debug_data.get(str(pid), [])
+
+            if not detections:
+                continue
+
+            det = detections[0]
+
+            label = det.get("label")
+            row = det.get("detected", {}).get("row")
+            col = det.get("detected", {}).get("adjusted_col")
+
+            if label is None or row is None or col is None:
+                continue
+
+            sentence = f"Estante {row}: agregar más cantidad de {label}."
+
+            tasks.append({
+                "row": row,
+                "col": col,
+                "action": "reponer",
+                "sentence": sentence
+            })
+
+        logger.debug("Missing stock tasks generated: %d", len(tasks))
+        return tasks
+
+    # -----------------------------------------------------
+
+    def _build_missing_tasks(
+        self,
+        data: dict,
+        position_map: dict,
+        consumed_positions: Set[Tuple[int, int]]
+    ) -> List[Dict]:
         """
         Generates tasks for products that are missing
         from expected positions.
@@ -92,6 +145,8 @@ class TaskBuilder:
                 row = int(row_str)
 
                 for col in cols:
+                    if (row, col) in consumed_positions:
+                        continue
                     sentence = self._build_sentence(
                         row=row,
                         col=col,
@@ -112,7 +167,11 @@ class TaskBuilder:
 
     # -----------------------------------------------------
 
-    def _build_misplaced_tasks(self, data: dict, position_map: dict) -> List[Dict]:
+    def _build_misplaced_tasks(
+        self,
+        data: dict,
+        position_map: dict
+    ) -> Tuple[List[Dict], Set[Tuple[int, int]]]:
         """
         Generates tasks for misplaced products.
 
@@ -124,6 +183,7 @@ class TaskBuilder:
 
         tasks = []
         debug_data = data.get("debug", {})
+        consumed_positions = set()
 
         # Build quick lookup structure by product ID
         id_info = {}
@@ -171,6 +231,7 @@ class TaskBuilder:
                     expected_pos == other_info["detected"]
                     and detected_pos == other_info["expected"]
                 ):
+                    
                     sentence = (
                         f"Estante {expected_pos[0]}: intercambiar "
                         f"{label} con {other_info['label']}."
@@ -182,7 +243,10 @@ class TaskBuilder:
                         "action": "mover",
                         "sentence": sentence
                     })
-
+                    
+                    consumed_positions.add(expected_pos)
+                    consumed_positions.add(detected_pos)
+                    
                     visited.add(pid)
                     visited.add(other_pid)
                     swap_found = True
@@ -218,11 +282,15 @@ class TaskBuilder:
             visited.add(pid)
 
         logger.debug("Misplaced tasks generated: %d", len(tasks))
-        return tasks
+        return tasks, consumed_positions
 
     # -----------------------------------------------------
 
-    def _build_unexpected_tasks(self, data: dict) -> List[Dict]:
+    def _build_unexpected_tasks(
+        self,
+        data: dict,
+        consumed_positions: Set[Tuple[int, int]]
+    ) -> List[Dict]:
         """
         Generates tasks for unexpected products
         that should be removed from shelves.
@@ -243,6 +311,9 @@ class TaskBuilder:
                     row = detections[0]["detected"]["row"]
                     col = detections[0]["detected"]["adjusted_col"]
 
+                    if (row, col) in consumed_positions:
+                        continue
+
                     sentence = f"Estante {row}: retirar {label}."
 
                     tasks.append({
@@ -254,6 +325,78 @@ class TaskBuilder:
 
         logger.debug("Unexpected tasks generated: %d", len(tasks))
         return tasks
+
+    # -----------------------------------------------------
+
+    def _build_replacement_tasks(
+        self,
+        data: dict,
+        position_map: dict,
+        already_consumed: Set[Tuple[int, int]]
+    ) -> Tuple[List[Dict], Set[Tuple[int, int]]]:
+        """
+        Detects when a product is unexpected in a position
+        where another product is missing.
+
+        Generates a single replacement task instead of
+        separate remove + reponer tasks.
+        """
+
+        logger.debug("Processing replacement tasks")
+
+        tasks = []
+        consumed_positions = set()
+
+        debug_data = data.get("debug", {})
+
+        # Build missing lookup by (row, col)
+        missing_lookup = {}
+
+        for item in data.get("missing", []):
+            label = item.get("label")
+            positions = item.get("positions", {})
+
+            for row_str, cols in positions.items():
+                row = int(row_str)
+                for col in cols:
+                    missing_lookup[(row, col)] = label
+
+        # Check unexpected products
+        for item in data.get("unexpected", []):
+            for extra_label, ids in item.items():
+
+                for pid in ids:
+                    detections = debug_data.get(str(pid), [])
+                    if not detections:
+                        continue
+
+                    row = detections[0]["detected"]["row"]
+                    col = detections[0]["detected"]["adjusted_col"]
+
+                    pos = (row, col)
+                    
+                    if pos in already_consumed:
+                        continue
+
+                    if pos in missing_lookup:
+                        expected_label = missing_lookup[pos]
+
+                        sentence = (
+                            f"Estante {row}: retirar {extra_label} "
+                            f"y reponer {expected_label} en su lugar."
+                        )
+
+                        tasks.append({
+                            "row": row,
+                            "col": col,
+                            "action": "retirar",  # prioridad más alta
+                            "sentence": sentence
+                        })
+
+                        consumed_positions.add(pos)
+
+        logger.debug("Replacement tasks generated: %d", len(tasks))
+        return tasks, consumed_positions
 
     # =====================================================
     # HELPERS

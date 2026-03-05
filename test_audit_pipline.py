@@ -25,7 +25,7 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
 )
 
-IMAGE_PATH = "input_images_test/img4.jpeg"
+IMAGE_PATH = "input_images_test/img3.jpeg"
 LABEL_IDS_JSON_PATH = "output/data_groups.json"
 PLANOGRAM_JSON_PATH = "output/products.json"
 

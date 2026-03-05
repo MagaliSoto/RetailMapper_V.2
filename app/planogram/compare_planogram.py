@@ -67,7 +67,6 @@ def _clip_matching(
                     best_label_per_id[pid] = label
                     threshold_per_id[pid] = float(threshold)
 
-    # Construir resumen final por producto
     for pid in product_embeddings.keys():
 
         assigned_label = best_label_per_id.get(pid)
@@ -134,10 +133,8 @@ def _handle_unexpected(
         except Exception:
             label = "producto generico"
 
-        # 🔹 Guardar en unexpected
         results["unexpected"].append({label: [pid]})
 
-        # 🔥 GUARDAR DEBUG PARA TASK BUILDER
         if debug:
             results.setdefault("debug", {})
             results["debug"].setdefault(str(pid), [])
@@ -169,10 +166,8 @@ def _handle_missing(
 
     missing_positions_by_row = defaultdict(list)
 
-    # Contar detectados por label
     detected_count_by_label = defaultdict(int)
 
-    # Guardar posiciones detectadas por label
     detected_positions_by_label = defaultdict(list)
 
     for det in products_detected:
@@ -199,7 +194,6 @@ def _handle_missing(
         expected_total = len(expected_positions)
         detected_total = detected_count_by_label.get(label, 0)
 
-        # 🔥 Solo hay missing si faltan unidades reales
         if detected_total >= expected_total:
             continue
 
@@ -207,14 +201,12 @@ def _handle_missing(
 
         detected_positions = detected_positions_by_label.get(label, [])
 
-        # Ahora sí calculamos posiciones faltantes
         missing_positions = [
             (row, col)
             for (row, col) in expected_positions
             if (row, col) not in detected_positions
         ]
 
-        # Por seguridad: limitar a la cantidad real faltante
         missing_positions = missing_positions[:missing_quantity]
 
         if missing_positions:
@@ -257,6 +249,7 @@ def compare_planogram(
         "different_location": [],
         "unexpected": [],
         "missing": [],
+        "missing_stock": [],
         "clip_label_assignment": {},
         "clip_debug": {} if debug else None,
         "debug": {} if debug else None,
@@ -267,7 +260,6 @@ def compare_planogram(
         label_embeddings_dict
     )
 
-    # Mantener agrupación simple
     clip_grouped = defaultdict(list)
     for pid, label in best_label_per_id.items():
         clip_grouped[label].append(pid)
@@ -300,6 +292,10 @@ def compare_planogram(
         results,
         debug
     )
+
+    list_missing_stock = []
+
+    results["missing_stock"].extend(list_missing_stock)
 
     return results
 
